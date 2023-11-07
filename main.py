@@ -1,7 +1,7 @@
 from typing import Tuple
 
 import pygame as pg
-from math import cos, sin, pi
+from math import cos, sin, pi, sqrt
 
 class Racecar(pg.sprite.Sprite):
 
@@ -21,9 +21,15 @@ class Racecar(pg.sprite.Sprite):
         self.x, self.y = (450,650)
         self.mask = pg.mask.from_surface(self.image)
 
+        # information
+        self.left_distance = 20
+        self.center_distance = 100
+        self.right_distance = 20
+
+
     def draw(self, surface):
         surface.blit(self.image, (self.x, self.y))
-    
+        
     def handle_input(self):
 
         key = pg.key.get_pressed()
@@ -39,7 +45,7 @@ class Racecar(pg.sprite.Sprite):
         elif key[pg.K_RIGHT]:
             rotation = -1
         
-        if self.speed > 1 and rotation:
+        if self.speed > 0 and rotation:
             self.angle += Racecar.ROTATION_PWR*rotation
             self.image = pg.transform.rotate(self.default_image, self.angle)
             self.rect = self.image.get_rect(center = self.rect.center)
@@ -60,9 +66,37 @@ class Racecar(pg.sprite.Sprite):
             self.y -= self.speed * sin(radians)
         else:
             self.speed = 0
+    
+    def calculate_line_endpoint_with_collision(self, angle, mask):
+        radians = angle * pi / 180
+        max_length = 1000 
+        x, y = self.x + self.rect.width / 2, self.y + self.rect.height / 2
+
+        while max_length > 0:
+            x += cos(radians)
+            y -= sin(radians)
+            if not mask.overlap(self.mask, (int(x) - mask.get_rect().x, int(y) - mask.get_rect().y)):
+                max_length -= 1
+            else:
+                break
         
+        return (x, y)
+    
+    def update_distances(self, mask):
 
+        points = []
+        distances = []
 
+        for angle in [-30, 0, 30]:
+            point = self.calculate_line_endpoint_with_collision(self.angle+angle, mask)
+            distances.append(sqrt( ((point[0]) - (self.x-self.rect.width/2))**2 + ((point[1])-(self.y-self.rect.height/2))**2)) 
+            points.append(point)
+        
+        self.left_distance = distances[0]
+        self.center_distance = distances[1]
+        self.right_distance = distances[2]
+
+        return points
 
 
 class Game:
@@ -123,9 +157,11 @@ class Game:
 
     def reset_screen(self):
         self.screen.blit(self.bg, (0, 0))
-    
+
+
     def crash(self):
-        if self.car.x >= 700 or self.car.y >= 700 or self.mask.get_at((self.car.x, self.car.y)):
+
+        if self.mask.overlap(self.car.mask, (self.car.x - self.mask.get_rect().x, self.car.y - self.mask.get_rect().y)):
             self.reset()
 
     def display_text(self):
@@ -160,6 +196,12 @@ class Game:
             skid_right = pg.Rect(left-2, right, 3, 3)
             pg.draw.rect(self.screen, (105,105,105), skid_left)
             pg.draw.rect(self.screen, (105,105,105), skid_right)
+
+        # Draw car lines
+        lines = self.car.update_distances(self.mask)
+        for (x, y) in lines:
+            pg.draw.line(self.screen, (255, 0, 0), (self.car.x + self.car.rect.width / 2, self.car.y + self.car.rect.height / 2), (x, y), 2)
+
         self.car.update()
         car_box_rect = pg.Rect(self.car.x, self.car.y, self.car.rect.width+1, self.car.rect.height+1)
         pg.draw.rect(self.screen, (0, 255, 0), car_box_rect, 2)
