@@ -1,7 +1,7 @@
 from typing import Tuple
 
 import pygame as pg
-from math import cos, sin, pi, sqrt
+from math import cos, sin, pi, sqrt, radians
 
 class Racecar(pg.sprite.Sprite):
 
@@ -11,7 +11,7 @@ class Racecar(pg.sprite.Sprite):
 
     def __init__(self):
         pg.sprite.Sprite.__init__(self)
-        self.default_image = pg.transform.rotate(pg.transform.scale(pg.image.load("Assets/car.png"), (15,27)), -90)
+        self.default_image = pg.transform.rotate(pg.transform.scale(pg.image.load("Assets/car.png"), (10,17)), -90)
         self.image = self.default_image
         self.rect = self.image.get_rect(center=(7.5,13.5))
         self.angle = 0
@@ -28,7 +28,7 @@ class Racecar(pg.sprite.Sprite):
 
 
     def draw(self, surface):
-        surface.blit(self.image, (self.x, self.y))
+        surface.blit(self.image, self.rect.topleft)
         
     def handle_input(self):
 
@@ -66,20 +66,25 @@ class Racecar(pg.sprite.Sprite):
             self.y -= self.speed * sin(radians)
         else:
             self.speed = 0
+        
+        self.rect.center = self.x, self.y
     
     def calculate_line_endpoint_with_collision(self, angle, mask):
-        radians = angle * pi / 180
-        max_length = 1000 
-        x, y = self.x + self.rect.width / 2, self.y + self.rect.height / 2
+        theta = radians(angle)
+        x, y = self.rect.center  # Get the starting point of the line
 
-        while max_length > 0:
-            x += cos(radians)
-            y -= sin(radians)
-            if not mask.overlap(self.mask, (int(x) - mask.get_rect().x, int(y) - mask.get_rect().y)):
-                max_length -= 1
+        mask_width, mask_height = mask.get_size()  # Get mask dimensions
+
+        while True:
+            x += cos(theta)
+            y -= sin(theta)
+
+            if 0 <= int(x) < mask_width and 0 <= int(y) < mask_height:
+                if mask.get_at((int(x), int(y))):
+                    break
             else:
-                break
-        
+                break 
+
         return (x, y)
     
     def update_distances(self, mask):
@@ -146,7 +151,6 @@ class Game:
     def reset(self):
         self.car.x, self.car.y = (450,650)
         self.car.speed = 0 
-        
         self.car.angle = 0
         self.car.image = pg.transform.rotate(self.car.default_image, self.car.angle)
         self.car.rect = self.car.image.get_rect(center = self.car.rect.center)
@@ -161,7 +165,7 @@ class Game:
 
     def crash(self):
 
-        if self.mask.overlap(self.car.mask, (self.car.x - self.mask.get_rect().x, self.car.y - self.mask.get_rect().y)):
+        if self.mask.overlap(self.car.mask, (self.car.rect.left - self.mask.get_rect().x, self.car.rect.top - self.mask.get_rect().y)):
             self.reset()
 
     def display_text(self):
@@ -189,22 +193,24 @@ class Game:
 
         self.car.handle_input()
         if self.car.is_breaking:
-            self.skid_marks.append((self.car.x, self.car.y))
-        for pos in self.skid_marks:
-            left, right = pos
-            skid_left = pg.Rect(left+2, right, 3, 3)
-            skid_right = pg.Rect(left-2, right, 3, 3)
+            self.skid_marks.append((self.car.rect.center, radians(self.car.angle)))
+        for data in self.skid_marks:
+            x, y = data[0]
+            theta = data[1]
+            print(theta)
+            skid_left = pg.Rect(x+5*cos(pi/2-theta), y+5*sin(pi/2-theta), 3, 3)
+            skid_right = pg.Rect(x-5*cos(pi/2-theta), y-5*sin(pi/2-theta), 3, 3)
             pg.draw.rect(self.screen, (105,105,105), skid_left)
             pg.draw.rect(self.screen, (105,105,105), skid_right)
 
         # Draw car lines
         lines = self.car.update_distances(self.mask)
-        for (x, y) in lines:
-            pg.draw.line(self.screen, (255, 0, 0), (self.car.x + self.car.rect.width / 2, self.car.y + self.car.rect.height / 2), (x, y), 2)
+        for (x, y) in lines:   
+            pg.draw.line(self.screen, (0, 255, 0), self.car.rect.center, (x, y), 2)
 
         self.car.update()
-        car_box_rect = pg.Rect(self.car.x, self.car.y, self.car.rect.width+1, self.car.rect.height+1)
-        pg.draw.rect(self.screen, (0, 255, 0), car_box_rect, 2)
+        #car_box_rect = pg.Rect(self.car.rect.left, self.car.rect.top, self.car.rect.width+1, self.car.rect.height+1)
+        #pg.draw.rect(self.screen, (0, 255, 0), car_box_rect, 2)
 
         self.car.draw(self.screen)
     
